@@ -22,6 +22,8 @@ class AuditCheckersResource extends Resource
     
     protected static ?string $navigationLabel = 'Audit Checkers';
 
+    protected static ?int $navigationSort = 2;
+
     public static function form(Form $form): Form
     {
         return $form
@@ -29,55 +31,91 @@ class AuditCheckersResource extends Resource
                 Forms\Components\Select::make('id_user')
                     ->label('User')
                     ->options(User::all()->pluck('name', 'id'))
-                    ->searchable()
+                    ->default(auth()->id())
+                    ->disabled()
+                    ->dehydrated()
+                    ->helperText('Otomatis terisi sesuai user yang login')
                     ->required(),
                     
-                Forms\Components\TextInput::make('id_audit')
+                    Forms\Components\Select::make('id_audit')
                     ->label('ID Audit')
-                    ->required()
-                    ->numeric(),
+                    ->relationship('audit', 'barang'),     
                     
                 Forms\Components\TextInput::make('produk')
-                    ->label('Produk')
+                    ->label('Isi/Produk')
                     ->required()
-                    ->maxLength(255),
+                    ->numeric()
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                        self::calculateTotal($get, $set);
+                    }),
                     
                 Forms\Components\TextInput::make('dus')
                     ->label('Dus')
                     ->required()
-                    ->numeric(),
-                    
+                    ->numeric()
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                        self::calculateTotal($get, $set);
+                    }),
+                                    
                 Forms\Components\TextInput::make('btl')
-                    ->label('Botol')
+                    ->label('Botol') 
                     ->required()
-                    ->numeric(),
+                    ->numeric()
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                        self::calculateTotal($get, $set);
+                    }),
                     
                 Forms\Components\TextInput::make('kotak')
                     ->label('Kotak')
                     ->required()
-                    ->numeric(),
+                    ->numeric()
+                    ->live(onBlur: true)
+                    ->afterStateUpdated(function (Forms\Get $get, Forms\Set $set) {
+                        self::calculateTotal($get, $set);
+                    }),
                     
                 Forms\Components\TextInput::make('total')
                     ->label('Total')
                     ->required()
-                    ->numeric(),
+                    ->numeric()
+                    ->disabled()
+                    ->dehydrated(),
             ]);
+    }
+    
+    protected static function calculateTotal(Forms\Get $get, Forms\Set $set): void
+    {
+        $isi = (float) $get('produk') ?: 0;
+        $dus = (float) $get('dus') ?: 0;
+        $btl = (float) $get('btl') ?: 0;
+        $kotak = (float) $get('kotak') ?: 0;
+        
+        // Rumus: produk × dus + botol + kotak
+        $total = ($isi * $dus) + $btl + $kotak;
+        
+        $set('total', $total);
     }
 
     public static function table(Table $table): Table
     {
         return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('id')
-                    ->label('ID')
-                    ->sortable(),
-                    
+            ->columns([   
+                Tables\Columns\TextColumn::make('no')
+                    ->label('No')
+                    ->state(
+                        static function ($record, $livewire, $rowLoop) {
+                            return $rowLoop->iteration;
+                        }),
+
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('User')
                     ->searchable()
                     ->sortable(),
                     
-                Tables\Columns\TextColumn::make('id_audit')
+                Tables\Columns\TextColumn::make('audit.barang')
                     ->label('ID Audit')
                     ->searchable()
                     ->sortable(),
@@ -86,7 +124,7 @@ class AuditCheckersResource extends Resource
                     ->label('Produk')
                     ->searchable()
                     ->sortable(),
-                    
+
                 Tables\Columns\TextColumn::make('dus')
                     ->label('Dus')
                     ->sortable()
@@ -121,9 +159,11 @@ class AuditCheckersResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
+                Tables\Actions\ViewAction::make()
+                ->label('Lihat'),
                 Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\DeleteAction::make()
+                ->label('Hapus'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
